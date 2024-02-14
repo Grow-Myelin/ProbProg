@@ -9,7 +9,7 @@ SideType = Dict[KeyType, int]
 RNGKey = Any
 
 
-def apply_hits_jax(side: SideType, hits_scored: int, rng_key: RNGKey) -> SideType:
+def apply_hits(side: SideType, hits_scored: int, rng_key: RNGKey) -> SideType:
     """
     Apply hits to a side with JAX, prioritizing dice with lower hit probabilities
     and lower health. Incorporates randomness in selecting dice within the same
@@ -46,7 +46,7 @@ def apply_hits_jax(side: SideType, hits_scored: int, rng_key: RNGKey) -> SideTyp
     return side
 
 
-def simulate_combat_round_jax(side_a: SideType, side_b: SideType, rng_key: RNGKey) -> Tuple[SideType, SideType]:
+def simulate_combat_round(side_a: SideType, side_b: SideType, rng_key: RNGKey) -> Tuple[SideType, SideType]:
     """
     Simulates a single round of combat between two sides using JAX.
 
@@ -64,8 +64,8 @@ def simulate_combat_round_jax(side_a: SideType, side_b: SideType, rng_key: RNGKe
     hits_scored_b = sum(random.binomial(rng_key_b, n=count, p=hit_probability).item()
                         for (hits_to_eliminate, hit_probability), count in side_b.items())
 
-    side_a_updated = apply_hits_jax(side_a.copy(), hits_scored_b, rng_key_a)
-    side_b_updated = apply_hits_jax(side_b.copy(), hits_scored_a, rng_key_b)
+    side_a_updated = apply_hits(side_a.copy(), hits_scored_b, rng_key_a)
+    side_b_updated = apply_hits(side_b.copy(), hits_scored_a, rng_key_b)
 
     return side_a_updated, side_b_updated
 
@@ -86,7 +86,7 @@ def run_combat_until_elimination(side_a: SideType, side_b: SideType, rng_key: RN
     """
     for round_number in range(1, max_rounds + 1):
         rng_key, round_key = random.split(rng_key)
-        side_a, side_b = simulate_combat_round_jax(side_a, side_b, round_key)
+        side_a, side_b = simulate_combat_round(side_a, side_b, round_key)
         if not side_a or not side_b:
             break
 
