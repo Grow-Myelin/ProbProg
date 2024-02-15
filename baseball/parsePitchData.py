@@ -18,39 +18,6 @@ def normalize_counts(pitch_counts: np.ndarray) -> np.ndarray:
     total_pitches = pitch_counts.sum()
     return pitch_counts / total_pitches if total_pitches > 0 else pitch_counts
 
-
-# def efficient_pitch_distribution(df: pd.DataFrame, pitch_types: List[str], filter_conditions: Dict[str, str]) -> np.ndarray:
-#     """
-#     Calculate and normalize the distribution of pitch types efficiently using multiple filter conditions.
-
-#     Parameters:
-#     - df: DataFrame containing pitch data.
-#     - pitch_types: List of all possible pitch types.
-#     - filter_conditions: Conditions to filter the DataFrame for specific calculations.
-
-#     Returns:
-#     - np.ndarray: Normalized distribution of pitch counts as proportions.
-#     """
-#     # Apply filter conditions dynamically
-#     filtered_df = df
-#     for condition, value in filter_conditions.items():
-#         filtered_df = filtered_df[filtered_df[condition] == value]
-#     print(filtered_df)
-#     pitches = filtered_df['pitch_type']
-
-#     # Map pitch types to their indices
-#     pitch_to_index = {pitch: i for i, pitch in enumerate(pitch_types)}
-    
-#     # Convert pitches to their corresponding indices
-#     pitch_indices = [pitch_to_index.get(pitch, -1) for pitch in pitches]
-#     pitch_indices = [i for i in pitch_indices if i >= 0]  # Filter out -1 values
-    
-#     # Count occurrences using np.bincount and ensure the array size matches pitch_types
-#     pitch_counts = np.bincount(pitch_indices, minlength=len(pitch_types))
-    
-#     # Normalize the counts
-#     return normalize_counts(pitch_counts)
-
 def efficient_pitch_distribution(df: pd.DataFrame, pitch_types: List[str], filter_conditions: Dict[str, str]) -> np.ndarray:
     """
     Calculate and normalize the distribution of pitch types, excluding the current event.
@@ -83,23 +50,7 @@ def efficient_pitch_distribution(df: pd.DataFrame, pitch_types: List[str], filte
     
     return normalize_counts(pitch_counts)
 
-
-
-df = pd.read_csv('savant_data.csv')
-#use_columns = ['pitch_type','pitch_name','pitch_number','at_bat_number','release_speed','game_date','pitcher','batter','home_team','away_team','zone','balls','strikes','on_3b','on_2b','on_1b','home_score','away_score','outs_when_up','p_throws','spin_axis']
-use_columns = ['game_date','pitch_type','pitcher','at_bat_number','pitch_number']
-df = df[use_columns].sort_values(['game_date','at_bat_number','pitch_number'])
-df = df[df['pitcher']==675911]
-pitch_types = df['pitch_type'].unique()
-#print(df['pitch_type'].unique())
-#df.to_csv('parsed_df.csv')
-# Example usage:
-# Calculate the distribution for the last pitch
-# start = time.time()
-# last_at_bat_number = df['at_bat_number'].iloc[-1]
-# last_game_date = df['game_date'].iloc[-1]
-# last_pitch_number = df['pitch_number'].iloc[-1]
-def return_pitch_distributions(df_row):
+def return_pitch_distributions(df, df_row, pitch_types) -> np.ndarray:
     last_at_bat_number = df_row['at_bat_number']
     last_game_date = df_row['game_date']
     last_pitch_number = df_row['pitch_number']
@@ -137,9 +88,46 @@ def return_pitch_distributions(df_row):
         "pitcher": current_pitcher
     }
     season_distribution_efficient = efficient_pitch_distribution(df, pitch_types, season_filter)
-    print(pitch_types)
-    print(last_pitch_distribution_efficient,at_bat_distribution_efficient,game_distribution_efficient,season_distribution_efficient)
+    distributions = jnp.stack([last_pitch_distribution_efficient,
+                               at_bat_distribution_efficient,
+                               game_distribution_efficient,
+                               season_distribution_efficient])
+    return distributions
 
-for index,row in df.iterrows():
-    print(row)
-    return_pitch_distributions(row)
+def return_current_pitch(df_row: pd.Series,pitch_types: List[str]):
+    current_pitch = df_row['pitch_type']
+    current_pitch_dist = [0]*len(pitch_types)
+    for n,pitch in enumerate(pitch_types):
+        if pitch == current_pitch:
+            current_pitch_dist[n] = 1
+    return current_pitch_dist
+
+def clean_data():
+    df = pd.read_csv('savant_data.csv')
+    #use_columns = ['pitch_type','pitch_name','pitch_number','at_bat_number','release_speed','game_date','pitcher','batter','home_team','away_team','zone','balls','strikes','on_3b','on_2b','on_1b','home_score','away_score','outs_when_up','p_throws','spin_axis']
+    use_columns = ['game_date','pitch_type','pitcher','at_bat_number','pitch_number']
+    df = df[use_columns].sort_values(['game_date','at_bat_number','pitch_number'])
+    df = df[df['pitcher']==675911]
+    pitch_types = df['pitch_type'].unique()
+    model_inputs = []
+    model_outputs = []
+    
+    for index, row in df.iterrows():
+        distributions = return_pitch_distributions(df, row, pitch_types)
+        current_pitch = return_current_pitch(row, pitch_types)
+        model_inputs.append(distributions)
+        model_outputs.append(current_pitch)
+        
+    
+    # Convert lists to JAX arrays for model input
+    #print(model_inputs)
+    model_inputs_jax = jnp.array(model_inputs)
+    model_outputs_jax = jnp.array(model_outputs)
+    return (model_inputs_jax,model_outputs_jax)
+
+def main():
+    inputs,outputs = clean_data()
+    print(outputs.shape[1])
+    
+if __name__ == "__main__":
+    main()
